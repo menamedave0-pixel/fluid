@@ -524,7 +524,7 @@ cmd_compile:
     mov [hFile], rax
     invoke ReadFile, [hFile], use_tmp_buffer, 32767, bytesRead, 0
     invoke CloseHandle, [hFile]
-    mov eax, [bytesRead]
+    mov eax, dword [bytesRead]
     mov byte [use_tmp_buffer + rax], 0
 
     ; 2. Expand top-level 'use <filename.flu>' directives into src_buffer
