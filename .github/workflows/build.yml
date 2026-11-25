@@ -19,7 +19,7 @@ jobs:
         uses: stevenwdv/setup-fasm@v2
 
       - name: Assemble ASM to EXE
-        run: fasm main.asm output.exe
+        run: fasm fluid.asm fluid.exe
 
       - name: Upload compiled EXE
         uses: actions/upload-artifact@v4
