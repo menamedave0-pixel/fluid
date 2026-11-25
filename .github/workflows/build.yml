@@ -1,0 +1,28 @@
+name: Build x86 Executable with FASM
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    # Windows runner is best for Windows PE (.exe) builds and standard win32a.inc headers
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup FASM
+        uses: stevenwdv/setup-fasm@v2
+
+      - name: Assemble ASM to EXE
+        run: fasm main.asm output.exe
+
+      - name: Upload compiled EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiled-x86-exe
+          path: output.exe
