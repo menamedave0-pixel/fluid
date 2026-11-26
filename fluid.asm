@@ -581,7 +581,7 @@ expand_use_imports:
     invoke ReadFile, [hFile], rdi, 32767, bytesRead, 0
     invoke CloseHandle, [hFile]
     pop rsi
-    mov eax, [bytesRead]
+    mov eax, dword [bytesRead]
     add rdi, rax
     mov byte [rdi], 10
     inc rdi
