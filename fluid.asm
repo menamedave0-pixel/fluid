@@ -1889,7 +1889,7 @@ run_codegen:
 
 .store_rhs_value:
     mov dword [sym_custom_idx + rdx*4], -1
-    mov bl, [expr_type_tag]
+    mov bl, byte [expr_type_tag]
     call emit_store_typed_symbol    ; Updates both payload (0 if null!) and runtime tag at +16!
     jmp .stmt_loop
 
