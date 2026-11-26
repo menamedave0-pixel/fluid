@@ -3762,7 +3762,7 @@ emit_format_active_vars:
     mov [rdi+8], r14b
     mov word [rdi+9], 0x1273
     add rdi, 11
-    mov eax, rcx
+    mov eax, ecx
     shl eax, 4
     add eax, r14d
     mov eax, [cls_fld_name + rax*4]
