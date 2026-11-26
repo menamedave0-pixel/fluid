@@ -1701,7 +1701,7 @@ run_codegen:
     ; 1. Check if identifier is a custom #define primitive type (e.g., 'rect x = 3.0, 2.0, 5, 5')
     call lookup_custom_def          ; Returns custom def index in ECX (-1 if not custom type)
     cmp ecx, -1
-    jne .decl_custom_type_var
+    jne decl_custom_type_var
 
     ; 2. Check built-in Fluid syscalls & runtime intrinsics
     cmp dword [r9], 'term'          ; terminal_add(...)
@@ -1799,7 +1799,7 @@ skip_to_nl:
     jmp skip_to_nl
 
 ; --- Custom #define Primitive Type Declaration: rect x = 3.0, 2.0, 5, 5 ---
-.decl_custom_type_var:
+decl_custom_type_var:
     add rsi, 8                      ; Advance to variable name (e.g., 'x')
     cmp byte [rsi], TOK_IDENT
     jne .stmt_loop
