@@ -1341,7 +1341,7 @@ run_codegen:
     call emit_copy_custom_to_symbol ; Copies 16B from [rax] into slot EDX and sets tag=TYPE_CUSTOM
     jmp .stmt_loop
 .store_scalar_init:
-    mov bl, [expr_type_tag]
+    mov bl, byte [expr_type_tag]
     call emit_store_typed_symbol
     jmp .stmt_loop
 .decl_no_init:
