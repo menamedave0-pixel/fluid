@@ -1707,9 +1707,9 @@ run_codegen:
     cmp dword [r9], 'term'          ; terminal_add(...)
     je call_terminal_add
     cmp dword [r9], 'wait'          ; wait(ms)
-    je .call_wait
+    je call_wait
     cmp dword [r9], 'wind'          ; window(w, h)
-    je .call_window
+    je call_window
     cmp dword [r9], 'draw'          ; draw(...) OR draw_tri(...) OR draw_line(...)
     je .dispatch_draw_call
     cmp dword [r9], 'push'          ; push(arr, val)
@@ -1717,7 +1717,7 @@ run_codegen:
     cmp dword [r9], 'init'          ; initiate(obj)
     je .call_initiate
     cmp dword [r9], 'crea'          ; create_file(path, filename, fileending)
-    je .call_create_file
+    je call_create_file
     cmp dword [r9], 'dele'          ; delete_file(path) OR delete_var(x) OR delete_var_class(m.z)
     je .dispatch_delete_call
 
@@ -1735,68 +1735,68 @@ run_codegen:
 
     ; 6. Standalone expression / mutating intrinsic call (e.g., str(m.a), my_fn())
     call eval_expr
-.skip_to_nl:
+skip_to_nl:
     mov al, [rsi]
     cmp al, TOK_EOF
     je finish_program
     cmp al, TOK_NEWLINE
     je .stmt_loop
     add rsi, 8
-    jmp .skip_to_nl
+    jmp skip_to_nl
 
 ; --- Dispatch 'draw' vs 'draw_tri' vs 'draw_line' ---
 .dispatch_draw_call:
     cmp dword [r9+4], '_tri'
-    je .call_draw_tri
+    je call_draw_tri 
     cmp dword [r9+4], '_lin'
-    je .call_draw_line
-    jmp .call_draw
+    je call_draw_line
+    jmp call_draw
 
 ; --- Dispatch 'delete_file' vs 'delete_var_class' vs 'delete_var' ---
 .dispatch_delete_call:
     cmp dword [r9+7], 'file'        ; delete_file(path)
-    je .call_delete_file
+    je call_delete_file
     cmp byte [r9+10], '_'           ; delete_var_class(m.z)
     je .do_delete_var_class
 
     ; delete_var(x): marks variable deleted at compile time
     add rsi, 16                     ; Skip 'delete_var' and '('
     cmp byte [rsi], TOK_IDENT
-    jne .skip_to_nl
+    jne skip_to_nl
     mov eax, [rsi+4]
     call lookup_symbol
     cmp edx, -1
-    je .skip_to_nl
+    je skip_to_nl
     mov byte [sym_deleted + rdx], 1
-    jmp .skip_to_nl
+    jmp skip_to_nl
 
 .do_delete_var_class:
     ; delete_var_class(m.z): sets bit in compile-time sym_obj_del_msk AND emits runtime btr!
     add rsi, 16                     ; Skip 'delete_var_class' and '('
     cmp byte [rsi], TOK_IDENT
-    jne .skip_to_nl
+    jne skip_to_nl
     mov eax, [rsi+4]                ; Instance variable name ('m')
     call lookup_symbol              ; Symbol index in EDX
     cmp edx, -1
-    je .skip_to_nl
+    je skip_to_nl
     cmp byte [sym_deleted + rdx], 1
     je .err_deleted_access
     add rsi, 8
     cmp byte [rsi], TOK_DOT
-    jne .skip_to_nl
+    jne skip_to_nl
     add rsi, 8                      ; Skip '.'
     cmp byte [rsi], TOK_IDENT
-    jne .skip_to_nl
+    jne skip_to_nl
     mov eax, [rsi+4]                ; Field name ('z')
     mov ecx, [sym_custom_idx + rdx*4]
     call lookup_class_field         ; Field bit index in ECX
     cmp ecx, -1
-    je .skip_to_nl
+    je skip_to_nl
     mov rax, 1
     shl rax, cl
     or [sym_obj_del_msk + rdx*8], rax
     call emit_clear_obj_field_bit_idx
-    jmp .skip_to_nl
+    jmp skip_to_nl
 
 ; --- Custom #define Primitive Type Declaration: rect x = 3.0, 2.0, 5, 5 ---
 .decl_custom_type_var:
@@ -1820,21 +1820,21 @@ run_codegen:
 .call_initiate:
     add rsi, 16                     ; Skip 'initiate' and '('
     cmp byte [rsi], TOK_IDENT
-    jne .skip_to_nl
+    jne skip_to_nl
     mov eax, [rsi+4]
     call lookup_symbol
     cmp edx, -1
-    je .skip_to_nl
+    je skip_to_nl
     cmp byte [sym_deleted + rdx], 1
     je .err_deleted_access
     call emit_call_obj_main
-    jmp .skip_to_nl
+    jmp skip_to_nl
 
 ; --- push(arr, val): appends element to dynamic Fluid array up to capacity ---
 .call_push:
     add rsi, 16                     ; Skip 'push' and '('
     cmp byte [rsi], TOK_IDENT
-    jne .skip_to_nl
+    jne skip_to_nl
     mov eax, [rsi+4]
     call lookup_symbol
     push rdx
@@ -1846,7 +1846,7 @@ run_codegen:
     call eval_expr
     pop rdx
     call emit_array_push
-    jmp .skip_to_nl
+    jmp skip_to_nl
 
 ; --- Dotted Statement: m.x = 12, game.obj g = phys, or dts.println(...) ---
 .handle_dotted_stmt:
@@ -2545,7 +2545,7 @@ call_terminal_add:
 
     ; Default: TYPE_STR (RAX = pointer to null-terminated string)
     call emit_write_cstr_rax
-    jmp .skip_to_nl
+    jmp skip_to_nl
 
 .term_print_char:
     mov edx, BSS_KEY_BUF + 4
@@ -2557,19 +2557,19 @@ call_terminal_add:
     mov dword [rdi+6], 0xD08948     ; mov rax, rdx
     add rdi, 9
     call emit_write_cstr_rax
-    jmp .skip_to_nl
+    jmp skip_to_nl
 
 .term_print_int:
     call emit_int_to_str_rax
     call emit_write_cstr_rax
-    jmp .skip_to_nl
+    jmp skip_to_nl
 
 .term_print_array:
     call emit_print_array_rax
-    jmp .skip_to_nl
+    jmp skip_to_nl
 
 ; --- Built-in Syscall: wait(ms) ---
-.call_wait:
+call_wait:
     add rsi, 16                     ; Skip 'wait' and '('
     call eval_expr                  ; ms -> EAX
     mov word [rdi], 0xC189          ; mov ecx, eax
@@ -2579,10 +2579,10 @@ call_terminal_add:
     call emit_iat_call
     mov dword [rdi], 0x20C48348     ; add rsp, 32
     add rdi, 4
-    jmp .skip_to_nl
+    jmp skip_to_nl
 
 ; --- Built-in Syscall: create_file(path, filename, fileending) ---
-.call_create_file:
+call_create_file:
     add rsi, 16                     ; Skip 'create_file' and '('
     call eval_expr                  ; arg1: path str ptr -> RAX
     mov byte [rdi], 0x50            ; push rax (path)
@@ -2652,10 +2652,10 @@ call_terminal_add:
     call emit_iat_call
     mov dword [rdi], 0x40C48348
     add rdi, 4
-    jmp .skip_to_nl
+    jmp skip_to_nl
 
 ; --- Built-in Syscall: delete_file(path) ---
-.call_delete_file:
+call_delete_file:
     add rsi, 16                     ; Skip 'delete_file' and '('
     call eval_expr                  ; path str ptr -> RAX
     ; mov rcx, rax (48 89 C1), sub rsp, 32 (48 83 EC 20), call [IAT_DELETE_FILE], add rsp, 32
@@ -2666,13 +2666,13 @@ call_terminal_add:
     call emit_iat_call
     mov dword [rdi], 0x20C48348
     add rdi, 4
-    jmp .skip_to_nl
+    jmp skip_to_nl
 ; ==============================================================================
 ; STAGE 2E-2: WIN32 WINDOW, OVERLOADED DRAW, DRAW_TRI ([]3), & DRAW_LINE
 ; ==============================================================================
 
 ; --- Built-in Syscall: window(w, h) ---
-.call_window:
+call_window:
     add rsi, 16                     ; Skip 'window' and '('
     call eval_expr                  ; width -> RAX
     mov edx, BSS_WIN_W
@@ -2764,10 +2764,10 @@ call_terminal_add:
     mov dword [rdi], 0x4289D8F7     ; neg eax; mov [rdx+8], eax (biHeight = -height top-down)
     mov byte [rdi+4], 0x08
     add rdi, 5
-    jmp .skip_to_nl
+    jmp skip_to_nl
 
 ; --- Built-in Syscall: draw(rect, color)  OR  draw(x, y, w, h, color) ---
-.call_draw:
+call_draw:
     add rsi, 16
     call eval_expr
     cmp dword [expr_type_tag], TYPE_CUSTOM
@@ -2813,10 +2813,10 @@ call_terminal_add:
 
 .draw_rect_blit:
     call emit_rasterize_rect_and_blit
-    jmp .skip_to_nl
+    jmp skip_to_nl
 
 ; --- Built-in Syscall: draw_tri(tri_array_3 [, color])  OR  draw_tri(p1, p2, p3 [, color]) ---
-.call_draw_tri:
+call_draw_tri :
     add rsi, 16                     ; Skip 'draw_tri' and '('
     call eval_expr                  ; First arg -> RAX, sets [expr_type_tag]
     cmp dword [expr_type_tag], TYPE_ARRAY
@@ -2852,7 +2852,7 @@ call_terminal_add:
     mov dword [rdi+4], 0x5A584141
     add rdi, 8
     call emit_rasterize_triangle_and_blit
-    jmp .skip_to_nl
+    jmp skip_to_nl
 
 .tri_from_array3:
     mov byte [rdi], 0x50            ; push tri_arr_ptr
@@ -2872,10 +2872,10 @@ call_terminal_add:
     mov dword [rdi+12], 0x18488B4C
     add rdi, 16
     call emit_rasterize_triangle_and_blit
-    jmp .skip_to_nl
+    jmp skip_to_nl
 
 ; --- Built-in Syscall: draw_line(p1, p2 [, color]) ---
-.call_draw_line:
+call_draw_line:
     add rsi, 16                     ; Skip 'draw_line' and '('
     call eval_expr                  ; p1 -> RAX
     mov byte [rdi], 0x50            ; push p1
@@ -2900,7 +2900,7 @@ call_terminal_add:
     mov word [rdi+4], 0x5A41
     add rdi, 6
     call emit_rasterize_line_and_blit
-    jmp .skip_to_nl
+    jmp skip_to_nl
 ; ==============================================================================
 ; STAGE 2E-3: ENTRY PATCHER & CONDITION EVALUATOR (if x == int / rect / null)
 ; ==============================================================================
@@ -3957,7 +3957,7 @@ emit_dotted_statement:
     jne .dot_stmt_member
     add rsi, 8
     cmp byte [rsi], TOK_IDENT
-    jne .skip_to_nl
+    jne skip_to_nl
     mov eax, [rsi+4]
     call register_symbol
     mov byte [sym_type_tag + rdx], TYPE_OBJ
@@ -3984,7 +3984,7 @@ emit_dotted_statement:
     je .dot_field_write
     pop rax
     cmp byte [rsi], TOK_LPAREN
-    jne .skip_to_nl
+    jne skip_to_nl
     add rsi, 8
     cmp byte [rsi], TOK_RPAREN
     je .dot_call_no_arg
@@ -4005,18 +4005,18 @@ emit_dotted_statement:
     add rdi, 5
     mov dword [rdi], 0x20C48348
     add rdi, 4
-    jmp .skip_to_nl
+    jmp skip_to_nl
 
 .dot_field_write:
     pop rax
     call lookup_symbol
     cmp edx, -1
-    je .skip_to_nl
+    je skip_to_nl
     mov ecx, [sym_custom_idx + rdx*4]
     mov eax, ebx
     call lookup_class_field
     cmp ecx, -1
-    je .skip_to_nl
+    je skip_to_nl
     bt qword [sym_obj_del_msk + rdx*8], rcx
     jc .dot_deleted_trap
     push rdx
@@ -4045,7 +4045,7 @@ emit_dotted_statement:
 .dot_deleted_trap:
     lea rcx, [err_del_msg]
     call print_cstr
-    jmp .skip_to_nl
+    jmp skip_to_nl
 
 eval_dotted_expr:
     mov eax, [rsi+4]
