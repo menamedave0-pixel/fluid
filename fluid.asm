@@ -1715,7 +1715,7 @@ run_codegen:
     cmp dword [r9], 'push'          ; push(arr, val)
     je call_push
     cmp dword [r9], 'init'          ; initiate(obj)
-    je .call_initiate
+    je call_initiate
     cmp dword [r9], 'crea'          ; create_file(path, filename, fileending)
     je call_create_file
     cmp dword [r9], 'dele'          ; delete_file(path) OR delete_var(x) OR delete_var_class(m.z)
@@ -1817,7 +1817,7 @@ decl_custom_type_var:
     jmp .stmt_loop
 
 ; --- initiate(g): invokes class g's single 'fn main' method ---
-.call_initiate:
+call_initiate:
     add rsi, 16                     ; Skip 'initiate' and '('
     cmp byte [rsi], TOK_IDENT
     jne skip_to_nl
