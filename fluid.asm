@@ -1020,7 +1020,7 @@ run_codegen:
 .stmt_loop:
     mov al, [rsi]
     cmp al, TOK_EOF
-    je .finish_program
+    je finish_program
 
     cmp al, TOK_NEWLINE
     je .skip_tok
@@ -1102,7 +1102,7 @@ run_codegen:
 .def_field_loop:
     mov al, [rsi]
     cmp al, TOK_EOF
-    je .finish_program
+    je finish_program
     cmp al, TOK_RBRACE
     je .def_done
     cmp al, TOK_NEWLINE
@@ -1456,7 +1456,7 @@ run_codegen:
     cmp al, TOK_RPAREN
     je .params_finished
     cmp al, TOK_EOF
-    je .finish_program
+    je finish_program
     cmp al, TOK_COMMA
     je .next_param_tok
 
@@ -1500,7 +1500,7 @@ run_codegen:
     cmp byte [rsi], TOK_RBRACK
     je .destr_done
     cmp byte [rsi], TOK_EOF
-    je .finish_program
+    je finish_program
     cmp byte [rsi], TOK_IDENT
     jne .destr_next_tok
     mov eax, [rsi+4]
@@ -1541,7 +1541,7 @@ run_codegen:
 .skip_to_fn_brace:
     mov al, [rsi]
     cmp al, TOK_EOF
-    je .finish_program
+    je finish_program
     cmp al, TOK_LBRACE
     je .fn_body_start
     add rsi, 8
@@ -1738,7 +1738,7 @@ run_codegen:
 .skip_to_nl:
     mov al, [rsi]
     cmp al, TOK_EOF
-    je .finish_program
+    je finish_program
     cmp al, TOK_NEWLINE
     je .stmt_loop
     add rsi, 8
@@ -2905,6 +2905,7 @@ eval_term:
 ; ==============================================================================
 
 ; --- Program End: Verify top-level 'fn main' exists & patch entry call at +5 ---
+finish_program:
 .finish_program:
     mov eax, [main_code_off]
     cmp eax, -1
