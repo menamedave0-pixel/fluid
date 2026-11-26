@@ -1705,7 +1705,7 @@ run_codegen:
 
     ; 2. Check built-in Fluid syscalls & runtime intrinsics
     cmp dword [r9], 'term'          ; terminal_add(...)
-    je 
+    je call_terminal_add
     cmp dword [r9], 'wait'          ; wait(ms)
     je .call_wait
     cmp dword [r9], 'wind'          ; window(w, h)
