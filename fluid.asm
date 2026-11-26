@@ -491,7 +491,7 @@ cmd_compile:
     mov [hFile], rax
     invoke ReadFile, [hFile], use_tmp_buffer, 32767, bytesRead, 0
     invoke CloseHandle, [hFile]
-    mov eax, [bytesRead]
+    mov eax, dword [bytesRead]
     mov byte [use_tmp_buffer + rax], 0
 
     call expand_use_imports
