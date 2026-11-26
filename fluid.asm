@@ -67,7 +67,6 @@ TYPE_CHR     = 4
 TYPE_ARRAY   = 5
 TYPE_CUSTOM  = 6   ; Custom #define primitive value type (e.g., rect)
 TYPE_OBJ     = 7   ; Subtractive prototype instance (e.g., obj m = fish)
-
 ; ==============================================================================
 ; DATA & BUFFERS
 ; ==============================================================================
@@ -236,20 +235,6 @@ section '.data' data readable writeable
     IAT_STRETCH_DIB    = 0x5170
 
     ; Target Executable (.exe) .bss Virtual Memory Layout (RVA 0x7000 ..):
-    ;   0x7000 = g_hwnd        (8 bytes)
-    ;   0x7008 = g_hdc         (8 bytes)
-    ;   0x7010 = g_win_w       (8 bytes)
-    ;   0x7018 = g_win_h       (8 bytes)
-    ;   0x7020 = g_bmi         (40 bytes: BITMAPINFOHEADER)
-    ;   0x7050 = g_msg         (48 bytes: Win32 MSG struct)
-    ;   0x7080 = g_heap_ptr    (8 bytes: bump allocator cursor)
-    ;   0x7088 = g_key_buf     (8 bytes: char buffer for get_key())
-    ;   0x7090 = g_point       (8 bytes: Win32 POINT {x:i32, y:i32})
-    ;   0x7098 = g_num_buf     (32 bytes: integer-to-string scratch)
-    ;   0x70C0 = g_path_buf    (256 bytes: assembled file path for create_file)
-    ;   0x7200 = g_globals     (6144 bytes: 256 global 24-byte universal slots)
-    ;   0x8A00 = g_heap_arena  (65536 bytes: arrays, obj prototypes, str() buffers)
-    ;   0x18A00 = g_framebuffer (1,228,800 bytes: up to 640 * 480 * 4 bytes BGRA)
     BSS_HWND           = 0x7000
     BSS_HDC            = 0x7008
     BSS_WIN_W          = 0x7010
@@ -302,22 +287,6 @@ section '.data' data readable writeable
         dq 0x5286 ; StretchDIBits
         dq 0      ; End GDI32 ILT
 
-        ; --- Import Address Table (IAT: RVA 0x50E8 .. 0x517F) ---
-        dq 0x51A4 ; 0x50E8 ExitProcess
-        dq 0x51B2 ; 0x50F0 GetStdHandle
-        dq 0x51C2 ; 0x50F8 WriteFile
-        dq 0x51CE ; 0x5100 Sleep
-        dq 0x51D6 ; 0x5108 QueryPerformanceCounter
-        dq 0x51F0 ; 0x5110 CreateFileA
-        dq 0x51FE ; 0x5118 ReadFile
-        dq 0x520A ; 0x5120 CloseHandle
-        dq 0x5218 ; 0x5128 DeleteFileA
-        dq 0      ; 0x5130 End KERNEL32 IAT
-
-        dq 0x5226 ; 0x5138 CreateWindowExA
-        dq 0x5140 ; 0x5140 GetDC (Wait: Hint/Name is 0x5238)
-        ; Fix exact Hint/Name RVAs for USER32 & GDI32 IAT:
-        sub rsp, 0 ; (Note: see clean IAT block below)
         ; --- Import Address Table (IAT: RVA 0x50E8 .. 0x517F) ---
         dq 0x51A4 ; 0x50E8 ExitProcess
         dq 0x51B2 ; 0x50F0 GetStdHandle
@@ -425,7 +394,6 @@ section '.bss' readable writeable
     cur_cls_idx     dd ?            ; Enclosing class index during compilation (-1 if none)
 
     ; --- Universal 24-Byte Variable Symbol Table ---
-    ; Slot layout: [+0..+15: 16B payload | +16: 1B TYPE_* tag | +17: 1B custom_idx]
     sym_str_off     rd 256          ; str_pool offset of variable name
     sym_offset      rd 256          ; Local: RBP byte offset (24, 48, ...); Global: BSS RVA
     sym_is_global   rb 256          ; 1 = global (.bss), 0 = local ([rbp - disp])
@@ -517,20 +485,16 @@ cmd_new:
 
 ; --- COMMAND: fluid compile / fluid run ---
 cmd_compile:
-    ; 1. Read target .flu file into use_tmp_buffer
     invoke CreateFileA, [targetFilePtr], GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0
     cmp rax, INVALID_HANDLE_VALUE
     je file_error
     mov [hFile], rax
     invoke ReadFile, [hFile], use_tmp_buffer, 32767, bytesRead, 0
     invoke CloseHandle, [hFile]
-    mov eax, dword [bytesRead]
+    mov eax, [bytesRead]
     mov byte [use_tmp_buffer + rax], 0
 
-    ; 2. Expand top-level 'use <filename.flu>' directives into src_buffer
     call expand_use_imports
-
-    ; 3. Lex -> Codegen -> Write PE64 .exe
     call run_lexer
     call run_codegen
     test eax, eax
@@ -758,7 +722,6 @@ run_lexer:
     mov [rdi+4], eax
     add rdi, 8
     jmp .loop
-
 ; --- Number Literal: Supports Hex (0xFF0000), Float (3.0, 7.5), and Int ---
 .number:
     cmp byte [rsi], '0'
@@ -845,7 +808,6 @@ run_lexer:
     or eax, edx
     inc rsi
     jmp .hex_loop
-
 ; --- Single Character Literal: '<', 'a', '\n' ---
 .char_lit:
     inc rsi
@@ -1118,7 +1080,6 @@ run_codegen:
 .skip_tok:
     add rsi, 8
     jmp .stmt_loop
-
 ; ==============================================================================
 ; #define <name> { <type>,<bits>:<field_name> ... }
 ; Registers a raw fixed-width packed primitive value type (like int or float)
@@ -1749,7 +1710,7 @@ run_codegen:
     je .call_wait
     cmp dword [r9], 'wind'          ; window(w, h)
     je .call_window
-    cmp dword [r9], 'draw'          ; draw(...) OR draw_tri(...)
+    cmp dword [r9], 'draw'          ; draw(...) OR draw_tri(...) OR draw_line(...)
     je .dispatch_draw_call
     cmp dword [r9], 'push'          ; push(arr, val)
     je .call_push
@@ -1783,10 +1744,12 @@ run_codegen:
     add rsi, 8
     jmp .skip_to_nl
 
-; --- Dispatch 'draw' vs 'draw_tri' ---
+; --- Dispatch 'draw' vs 'draw_tri' vs 'draw_line' ---
 .dispatch_draw_call:
     cmp dword [r9+4], '_tri'
     je .call_draw_tri
+    cmp dword [r9+4], '_lin'
+    je .call_draw_line
     jmp .call_draw
 
 ; --- Dispatch 'delete_file' vs 'delete_var_class' vs 'delete_var' ---
@@ -1829,11 +1792,10 @@ run_codegen:
     call lookup_class_field         ; Field bit index in ECX
     cmp ecx, -1
     je .skip_to_nl
-    ; Record deleted bit in compile-time mask (sym_obj_del_msk[rdx] |= (1 << ecx))
     mov rax, 1
     shl rax, cl
     or [sym_obj_del_msk + rdx*8], rax
-    call emit_clear_obj_field_bit_idx ; Clears runtime bit cl in instance [rdx]
+    call emit_clear_obj_field_bit_idx
     jmp .skip_to_nl
 
 ; --- Custom #define Primitive Type Declaration: rect x = 3.0, 2.0, 5, 5 ---
@@ -1889,68 +1851,7 @@ run_codegen:
 ; --- Dotted Statement: m.x = 12, game.obj g = phys, or dts.println(...) ---
 .handle_dotted_stmt:
     call emit_dotted_statement
-    test eax, eax
-    jnz .err_deleted_access
     jmp .stmt_loop
-
-; --- Universal Scalar / Fluid Assignment: x = expr (morphs into any type including custom & null!) ---
-.assign_var:
-    call register_symbol            ; Returns symbol index in EDX
-    cmp byte [sym_deleted + rdx], 1
-    je .err_deleted_access
-    cmp byte [sym_const_lock + rdx], 1
-    je .const_reassign_error
-    push rdx
-    add rsi, 16                     ; Skip <ident> and '='
-    call eval_expr                  ; 64-bit result/ptr -> RAX, tag -> [expr_type_tag]
-    pop rdx
-    ; If RHS is a 16-byte custom #define primitive (TYPE_CUSTOM), copy all 16 bytes + custom_idx!
-    cmp dword [expr_type_tag], TYPE_CUSTOM
-    jne .store_scalar_assign
-    mov ecx, [expr_custom_idx]
-    mov [sym_custom_idx + rdx*4], ecx
-    call emit_copy_custom_to_symbol
-    jmp .stmt_loop
-.store_scalar_assign:
-    mov dword [sym_custom_idx + rdx*4], -1
-    mov bl, [expr_type_tag]
-    call emit_store_typed_symbol
-    jmp .stmt_loop
-
-; --- Array Element Assignment: arr[i] = expr ---
-.assign_array:
-    push rax
-    add rsi, 16                     ; Skip <ident> and '['
-    call eval_expr                  ; Index -> RAX
-    mov byte [rdi], 0x50            ; push rax
-    inc rdi
-    cmp byte [rsi], TOK_RBRACK
-    jne .arr_wr_chk_eq
-    add rsi, 8
-.arr_wr_chk_eq:
-    cmp byte [rsi], TOK_ASSIGN
-    jne .arr_wr_eval_rhs
-    add rsi, 8
-.arr_wr_eval_rhs:
-    call eval_expr                  ; RHS value -> RAX
-    mov byte [rdi], 0x59            ; pop rcx (index)
-    inc rdi
-    pop rax
-    call lookup_symbol              ; Symbol index in EDX
-    call emit_array_elem_write      ; Writes RAX to [arr_ptr + 8 + rcx*8]
-    jmp .stmt_loop
-
-.const_reassign_error:
-    lea rcx, [err_const_msg]
-    call print_cstr
-    mov eax, 1
-    ret
-
-.err_deleted_access:
-    lea rcx, [err_del_msg]
-    call print_cstr
-    mov eax, 1
-    ret
 ; ==============================================================================
 ; STAGE 2C-3: UNIVERSAL FLUID & TYPED ASSIGNMENTS
 ; ==============================================================================
@@ -1963,11 +1864,9 @@ run_codegen:
     push rdx
     add rsi, 16                     ; Skip <ident> and '='
 
-    ; Check if variable is a 'fluid' (or custom type) being assigned comma-packed custom literals:
-    ; e.g., x = 3.0, 2.0, 5, 5  when x is 'fluid' or 'rect'
+    ; Check if variable is a custom type being assigned comma-packed custom literals:
     cmp byte [sym_type_tag + rdx], TYPE_CUSTOM
     jne .eval_scalar_rhs
-    ; Verify RHS isn't 'null' or another variable before comma-packing
     cmp byte [rsi], TOK_KW_NULL
     je .eval_scalar_rhs
     cmp byte [rsi], TOK_IDENT
@@ -1989,6 +1888,7 @@ run_codegen:
     jmp .stmt_loop
 
 .store_rhs_value:
+    mov dword [sym_custom_idx + rdx*4], -1
     mov bl, [expr_type_tag]
     call emit_store_typed_symbol    ; Updates both payload (0 if null!) and runtime tag at +16!
     jmp .stmt_loop
@@ -2013,15 +1913,7 @@ run_codegen:
     inc rdi
     pop rax
     call lookup_symbol
-    mov dword [rdi], 0xF8458948     ; mov [rbp - 8], rax (save RHS value)
-    mov dword [rdi+4], 0xF04D8948   ; mov [rbp - 16], rcx (save index)
-    add rdi, 8
-    call emit_load_symbol_rax       ; Array base ptr -> RAX
-    mov dword [rdi], 0xF04D8B48     ; mov rcx, [rbp - 16]
-    mov dword [rdi+4], 0xF8558B48   ; mov rdx, [rbp - 8]
-    mov dword [rdi+8], 0xC8548948   ; mov [rax + rcx*8 + 8], rdx
-    mov byte [rdi+12], 0x08
-    add rdi, 13
+    call emit_array_elem_write
     jmp .stmt_loop
 
 .const_reassign_error:
@@ -2036,7 +1928,7 @@ run_codegen:
     mov eax, 1
     ret
 ; ==============================================================================
-; STAGE 2D-1: 64-BIT EXPRESSION EVALUATOR (CONSTANT FOLDING & STRENGTH REDUCTION)
+; STAGE 2D-1A: 64-BIT EXPRESSION EVALUATOR (ADDITIVE & SPATIAL '->' TIERS)
 ; ==============================================================================
 eval_expr:
     ; Fast-path compile-time constant folding for <TOK_INT> <op> <TOK_INT>
@@ -2145,8 +2037,9 @@ eval_expr:
     call emit_aabb_collision_check
     mov dword [expr_type_tag], TYPE_INT
     jmp .add_loop
-
-; --- Multiplicative Tier (*, \, %) with Constant Folding & Power-of-2 Shifts ---
+; ==============================================================================
+; STAGE 2D-1B: MULTIPLICATIVE TIER (*, \, %) WITH CONSTANT FOLDING & SHIFTS
+; ==============================================================================
 eval_mul:
     cmp byte [rsi], TOK_INT
     jne .eval_mul_runtime
@@ -2432,7 +2325,7 @@ eval_term:
     cmp byte [rsi+8], TOK_LBRACK
     je .eval_array_read_expr
 
-    ; Standard variable read (passes symbol index in [last_loaded_sym] for fluid runtime dispatch!)
+    ; Standard variable read
     add rsi, 8
     call lookup_symbol
     cmp edx, -1
@@ -2688,7 +2581,6 @@ eval_term:
     jmp .skip_to_nl
 
 ; --- Built-in Syscall: create_file(path, filename, fileending) ---
-; Concatenates path + filename + "." + fileending into BSS_PATH_BUF, calls CreateFileA + CloseHandle
 .call_create_file:
     add rsi, 16                     ; Skip 'create_file' and '('
     call eval_expr                  ; arg1: path str ptr -> RAX
@@ -2706,12 +2598,7 @@ eval_term:
     add rsi, 8
 .cf_arg3:
     call eval_expr                  ; arg3: fileending str ptr -> RAX
-    ; Pop arg2 -> R9, Pop arg1 -> R8, move arg3 -> R10
     ; mov r10, rax (49 89 C2), pop r9 (41 59), pop r8 (41 58)
-    mov dword [rdi], 0x41C28949
-    mov dword [rdi+4], 0x58415959
-    ; Fix exact 7-byte sequence: mov r10, rax (49 89 C2), pop r9 (41 59), pop r8 (41 58)
-    sub rdi, 0
     mov dword [rdi], 0x41C28949
     mov word [rdi+4], 0x4159
     mov byte [rdi+6], 0x58
@@ -2723,7 +2610,6 @@ eval_term:
     mov dword [rdi], 0x00C38949     ; mov r11, rax
     add rdi, 3
 
-    ; Copy R8 (path), R9 (filename), literal '.', and R10 (fileending) into [R11++]
     call emit_append_r8_to_r11
     call emit_append_r9_to_r11
     ; Write '.' and copy R10: mov byte [r11], '.' (41 C6 03 2E), inc r11 (49 FF C3), mov r8, r10 (4D 89 D0)
@@ -2737,13 +2623,10 @@ eval_term:
     add rdi, 4
 
     ; CreateFileA(BSS_PATH_BUF, GENERIC_WRITE=0x40000000, 0, 0, CREATE_ALWAYS=2, FILE_ATTRIBUTE_NORMAL=0x80, 0)
-    ; sub rsp, 64 (48 83 EC 40 -> 32B shadow + 3 stack args + 8B align)
     mov dword [rdi], 0x40EC8348
     add rdi, 4
     mov edx, BSS_PATH_BUF
     call emit_lea_rcx_rva
-    ; mov edx, 0x40000000 (BA 00 00 00 40), xor r8d, r8d (45 31 C0), xor r9d, r9d (45 31 C9)
-    ; mov qword [rsp+32], 2, mov qword [rsp+40], 0x80, mov qword [rsp+48], 0
     mov byte [rdi], 0xBA
     mov dword [rdi+1], 0x40000000
     mov dword [rdi+5], 0x45C03145
@@ -2761,7 +2644,7 @@ eval_term:
     mov edx, IAT_CREATE_FILE
     call emit_iat_call
 
-    ; CloseHandle(rax): mov rcx, rax (48 89 C1), call [IAT_CLOSE_HANDLE], add rsp, 64
+    ; CloseHandle(rax)
     mov dword [rdi], 0x00C18948
     add rdi, 3
     mov edx, IAT_CLOSE_HANDLE
@@ -2775,8 +2658,6 @@ eval_term:
     add rsi, 16                     ; Skip 'delete_file' and '('
     call eval_expr                  ; path str ptr -> RAX
     ; mov rcx, rax (48 89 C1), sub rsp, 32 (48 83 EC 20), call [IAT_DELETE_FILE], add rsp, 32
-    mov dword [rdi], 0xEC834800     ; align
-    sub rdi, 1
     mov dword [rdi], 0x48C18948
     mov dword [rdi+4], 0x0020EC83
     add rdi, 7
@@ -2788,11 +2669,6 @@ eval_term:
 ; ==============================================================================
 ; STAGE 2E-2: WIN32 WINDOW, OVERLOADED DRAW, DRAW_TRI ([]3), & DRAW_LINE
 ; ==============================================================================
-
-; --- Updated Draw Dispatcher (add to Chunk 11 .dispatch_draw_call) ---
-;   cmp dword [r9+4], '_tri'   -> je .call_draw_tri
-;   cmp dword [r9+4], '_lin'   -> je .call_draw_line
-;   jmp .call_draw
 
 ; --- Built-in Syscall: window(w, h) ---
 .call_window:
@@ -2962,7 +2838,6 @@ eval_term:
     call eval_expr                  ; p3
     mov byte [rdi], 0x50
     inc rdi
-    ; Optional 4th arg: color (defaults to 0xFFFFFF white)
     mov eax, 0xFFFFFF
     mov byte [rdi], 0xB8
     mov [rdi+1], eax
@@ -2972,7 +2847,6 @@ eval_term:
     add rsi, 8
     call eval_expr                  ; color -> RAX
 .tri_pop_verts:
-    ; mov r11d, eax (color), pop r9 (p3), pop r8 (p2), pop rdx (p1)
     mov dword [rdi], 0x59C38941
     mov dword [rdi+4], 0x5A584141
     add rdi, 8
@@ -2980,7 +2854,6 @@ eval_term:
     jmp .skip_to_nl
 
 .tri_from_array3:
-    ; Array []3 form: RAX = ptr to [cap:4B | len:4B | p1:8B | p2:8B | p3:8B]
     mov byte [rdi], 0x50            ; push tri_arr_ptr
     inc rdi
     mov eax, 0xFFFFFF               ; Default white 0xFFFFFF
@@ -2992,8 +2865,6 @@ eval_term:
     add rsi, 8
     call eval_expr                  ; Optional color -> RAX
 .tri_unpack_arr3:
-    ; mov r11d, eax (color), pop rax (arr_ptr)
-    ; mov rdx, [rax+8] (p1), mov r8, [rax+16] (p2), mov r9, [rax+24] (p3)
     mov dword [rdi], 0x58C38941
     mov dword [rdi+4], 0x08508B48
     mov dword [rdi+8], 0x10408B4C
@@ -3024,7 +2895,6 @@ eval_term:
     add rsi, 8
     call eval_expr                  ; Optional color -> RAX
 .line_pop_pts:
-    ; mov r11d, eax (color), pop r8 (p2), pop rdx (p1)
     mov dword [rdi], 0x58C38941
     mov word [rdi+4], 0x5A41
     add rdi, 6
@@ -3094,8 +2964,7 @@ emit_condition:
     push rcx                        ; Save custom def index
     call emit_load_slot_tag_eax     ; Loads [slot+16] (tag) in AL, [slot+17] (def_idx) in AH
     pop rcx
-    ; cmp al, TYPE_CUSTOM (3C 06), jne +12, cmp ah, cl (38 CC), jne +8
-    ; Simpler: compare AX against ((cl << 8) | TYPE_CUSTOM): cmp ax, imm16 (66 3D <imm16>)
+    ; Compare AX against ((cl << 8) | TYPE_CUSTOM): cmp ax, imm16 (66 3D <imm16>)
     shl ecx, 8
     or ecx, TYPE_CUSTOM
     mov word [rdi], 0x3D66
@@ -3227,6 +3096,18 @@ emit_append_r8_to_r11:
     mov dword [rdi+4], 0x410974C0
     mov dword [rdi+8], 0xFF490388
     mov dword [rdi+12], 0xC3FF49C0
+    mov word [rdi+16], 0xEFEB
+    add rdi, 18
+    ret
+
+; --- Helper: Copies null-terminated string from R9 into [R11++] (for create_file) ---
+emit_append_r9_to_r11:
+    ; mov al, [r9] (41 8A 01), test al, al (84 C0), jz +9 (74 09)
+    ; mov [r11], al (41 88 03), inc r9 (49 FF C1), inc r11 (49 FF C3), jmp -17 (EB EF)
+    mov dword [rdi], 0x84018A41
+    mov dword [rdi+4], 0x410974C0
+    mov dword [rdi+8], 0xFF490388
+    mov dword [rdi+12], 0xC3FF49C1
     mov word [rdi+16], 0xEFEB
     add rdi, 18
     ret
@@ -3717,13 +3598,11 @@ emit_pack_custom_def:
     jmp .pack_loop
 .pack_done:
     pop rdx
-    ; Write runtime tag TYPE_CUSTOM at +16 and custom_def_idx at +17!
     mov byte [sym_type_tag + rdx], TYPE_CUSTOM
     mov [sym_custom_idx + rdx*4], ecx
     push rcx
     call emit_lea_symbol_rax
     pop rcx
-    ; mov word [rax+16], ((def_idx << 8) | TYPE_CUSTOM) -> 66 C7 40 10 <imm16>
     shl ecx, 8
     or ecx, TYPE_CUSTOM
     mov dword [rdi], 0x1040C766
@@ -3735,7 +3614,6 @@ emit_pack_custom_def:
 emit_copy_custom_to_symbol:
     push rdx
     push rcx
-    ; mov r8, [rax] (4C 8B 00), mov r9, [rax+8] (4C 8B 48 08)
     mov dword [rdi], 0x4C008B4C
     mov dword [rdi+4], 0x0008488B
     add rdi, 7
@@ -3746,7 +3624,6 @@ emit_copy_custom_to_symbol:
     mov [sym_custom_idx + rdx*4], ecx
     shl ecx, 8
     or ecx, TYPE_CUSTOM
-    ; mov [rax], r8 (4C 89 00), mov [rax+8], r9 (4C 89 48 08), mov word [rax+16], imm16 (66 C7 40 10 <imm16>)
     mov dword [rdi], 0x4C00894C
     mov dword [rdi+4], 0x66084889
     mov word [rdi+8], 0x40C7
@@ -3755,7 +3632,7 @@ emit_copy_custom_to_symbol:
     add rdi, 13
     ret
 ; ==============================================================================
-; STAGE 2F-3A: SUBTRACTIVE OBJ EMITTERS, IN-PLACE str(), & CONSOLE WRITERS
+; STAGE 2F-3A-1: SUBTRACTIVE OBJ EMITTERS, IN-PLACE str(), & CONSOLE WRITERS
 ; ==============================================================================
 
 emit_alloc_array_from_stack:
@@ -3804,6 +3681,18 @@ emit_array_push:
     add rdi, 19
     ret
 
+emit_array_elem_write:
+    mov dword [rdi], 0xF8458948     ; mov [rbp - 8], rax
+    mov dword [rdi+4], 0xF04D8948   ; mov [rbp - 16], rcx
+    add rdi, 8
+    call emit_load_symbol_rax
+    mov dword [rdi], 0xF04D8B48     ; mov rcx, [rbp - 16]
+    mov dword [rdi+4], 0xF8558B48   ; mov rdx, [rbp - 8]
+    mov dword [rdi+8], 0xC8548948   ; mov [rax + rcx*8 + 8], rdx
+    mov byte [rdi+12], 0x08
+    add rdi, 13
+    ret
+
 emit_instantiate_obj:
     push rdx
     mov ecx, 264
@@ -3816,20 +3705,13 @@ emit_instantiate_obj:
     call emit_store_typed_symbol
     ret
 
-; --- Clears field EAX in instance EDX (both compile-time mask & runtime bitmask!) ---
-emit_clear_obj_field_bit:
-    mov ecx, [sym_custom_idx + rdx*4]
-    call lookup_class_field         ; Returns field bit index (0..15) in ECX
-    cmp ecx, -1
-    je .clr_bit_done
-    bts qword [sym_obj_del_msk + rdx*8], rcx
+emit_clear_obj_field_bit_idx:
     push rcx
     call emit_load_symbol_rax
     pop rcx
     mov dword [rdi], 0x30BA0F48     ; btr qword [rax], cl
     mov [rdi+4], cl
     add rdi, 5
-.clr_bit_done:
     ret
 
 emit_call_obj_main:
@@ -3969,7 +3851,6 @@ emit_mutate_to_string:
 .mut_done:
     ret
 
-; --- Fixed Signed 64-bit Integer to String (with negative '-' support) ---
 emit_int_to_str_rax:
     mov dword [rdi], 0xF8458948
     add rdi, 4
@@ -3999,7 +3880,6 @@ emit_int_to_str_rax:
     add rdi, 75
     ret
 
-; --- Fixed RBP-Independent WriteFile Helper (uses [rsp+40] inside shadow space) ---
 emit_write_cstr_rax:
     mov dword [rdi], 0x42C03145
     mov dword [rdi+4], 0x00003C80
@@ -4029,7 +3909,6 @@ emit_write_cstr_rax:
     add rdi, 4
     ret
 
-; --- Fixed Array Printer ("x y z\n") ---
 emit_print_array_rax:
     mov byte [rdi], 0x53
     mov word [rdi+1], 0x5441
@@ -4067,7 +3946,7 @@ emit_print_array_rax:
     add rdi, 3
     ret
 ; ==============================================================================
-; STAGE 2F-3B: DOTTED STATEMENT & EXPRESSION RESOLVERS
+; STAGE 2F-3A-2: DOTTED STATEMENT & EXPRESSION RESOLVERS
 ; ==============================================================================
 emit_dotted_statement:
     mov eax, [rsi+4]
@@ -4254,8 +4133,14 @@ eval_dotted_expr:
     add rdi, 2
     ret
 ; ==============================================================================
-; STAGE 2F-3C: 24-BYTE UNIVERSAL SLOT HELPERS, PE64 WRITER, & COMPILER IMPORTS
+; STAGE 2F-3B-1: 24-BYTE UNIVERSAL SLOT HELPERS & SYMBOL/CLASS LOOKUPS
 ; ==============================================================================
+emit_load_slot_tag_eax:
+    call emit_lea_symbol_rax
+    mov dword [rdi], 0x1040B70F     ; movzx eax, word [rax + 16]
+    add rdi, 4
+    ret
+
 emit_load_symbol_rax:
     cmp byte [sym_is_global + rdx], 1
     je .ld_glob
@@ -4481,7 +4366,9 @@ lookup_def_field:
 .ldf_no:
     mov ecx, -1
     ret
-
+; ==============================================================================
+; STAGE 2F-3B-2: CLASS LOOKUPS, STAGE 3 PE64 WRITER, & COMPILER IMPORTS
+; ==============================================================================
 lookup_class:
     xor ecx, ecx
 .lc_lp:
