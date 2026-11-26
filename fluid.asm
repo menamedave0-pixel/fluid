@@ -1705,7 +1705,7 @@ run_codegen:
 
     ; 2. Check built-in Fluid syscalls & runtime intrinsics
     cmp dword [r9], 'term'          ; terminal_add(...)
-    je .call_terminal_add
+    je 
     cmp dword [r9], 'wait'          ; wait(ms)
     je .call_wait
     cmp dword [r9], 'wind'          ; window(w, h)
@@ -2530,6 +2530,7 @@ eval_term:
 ; ==============================================================================
 
 ; --- Built-in Syscall: terminal_add(val) ---
+call_terminal_add:
 .call_terminal_add:
     add rsi, 16                     ; Skip 'terminal_add' and '('
     call eval_expr                  ; Evaluates argument -> RAX, sets [expr_type_tag]
