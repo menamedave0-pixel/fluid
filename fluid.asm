@@ -2910,7 +2910,7 @@ eval_term:
     cmp eax, -1
     je .missing_main
     sub eax, 9
-    mov [code_buffer + 5], eax
+    mov dword [code_buffer + 5], eax
     xor eax, eax
     ret
 
