@@ -1713,7 +1713,7 @@ run_codegen:
     cmp dword [r9], 'draw'          ; draw(...) OR draw_tri(...) OR draw_line(...)
     je dispatch_draw_call
     cmp dword [r9], 'push'          ; push(arr, val)
-    je .call_push
+    je call_push
     cmp dword [r9], 'init'          ; initiate(obj)
     je .call_initiate
     cmp dword [r9], 'crea'          ; create_file(path, filename, fileending)
@@ -1831,7 +1831,7 @@ decl_custom_type_var:
     jmp skip_to_nl
 
 ; --- push(arr, val): appends element to dynamic Fluid array up to capacity ---
-.call_push:
+call_push:
     add rsi, 16                     ; Skip 'push' and '('
     cmp byte [rsi], TOK_IDENT
     jne skip_to_nl
