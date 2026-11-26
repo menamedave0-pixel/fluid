@@ -1711,7 +1711,7 @@ run_codegen:
     cmp dword [r9], 'wind'          ; window(w, h)
     je call_window
     cmp dword [r9], 'draw'          ; draw(...) OR draw_tri(...) OR draw_line(...)
-    je .dispatch_draw_call
+    je dispatch_draw_call
     cmp dword [r9], 'push'          ; push(arr, val)
     je .call_push
     cmp dword [r9], 'init'          ; initiate(obj)
@@ -1745,7 +1745,7 @@ skip_to_nl:
     jmp skip_to_nl
 
 ; --- Dispatch 'draw' vs 'draw_tri' vs 'draw_line' ---
-.dispatch_draw_call:
+dispatch_draw_call:
     cmp dword [r9+4], '_tri'
     je call_draw_tri 
     cmp dword [r9+4], '_lin'
