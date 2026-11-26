@@ -4036,7 +4036,7 @@ emit_dotted_statement:
     add ecx, 8
     mov word [rdi+11], 0x80C6
     mov [rdi+13], ecx
-    mov bl, [expr_type_tag]
+    mov bl, byte [expr_type_tag]
     mov [rdi+17], bl
     add rdi, 18
     ret
